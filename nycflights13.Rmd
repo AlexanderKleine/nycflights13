@@ -25,6 +25,8 @@ airports <- airports
 planes <- planes
 weather <- nycflights13::weather # This statement is maybe less confusing
 flights <- nycflights13::flights # This statement is maybe less confusing
+
+help("airlines")
 ```
 
 # Analyse data
@@ -34,28 +36,37 @@ Inspect the airlines data via `View` and print the first 5 rows.
 > Note: It is helpful to `View` the data in interactive analysis, but afterwards delete it from your script or Rmd file.
 
 ```{r}
-
+view(airlines)
+head(airlines)
 ```
 
 ## Airports 
 Inspect the airports data via `View`. It contains the column `alt` which is the altitude of the airport in feet. Replace `alt` by the corresponding altitude in meters (meter = feet * 3.28084). Use the `mutate` function for this operation. You have to assign again to `airports` in order to change the data (not only print the changes).
 ```{r}
-# airports <- airports %>% mutate(alt = .....)
+airports <- airports %>% 
+  mutate(alt = alt * 3.28084)
 ```
 
 Filter for the 5 airports with the highest altitude
 ```{r}
-
+airports %>% arrange(desc(alt)) %>%
+  head(5)
 ```
 
 Filter for all airports which are located at an altitude lower than sea level
 ```{r}
+airports %>% filter(alt < 0)
 ```
 
 ## Weather
 Use `View` to inspect the data and print the first 5 rows. Does the data only cover the airports in New York, or also the weather data at destination airports? 
 ```{r}
-
+View(weather)
+head(weather, 5)
+str(weather)
+attributes(weather)
+unique(weather$origin)
+unique(weather$year)
 ```
 
 
@@ -69,6 +80,11 @@ Let's change the units of the weather data to European standards.
 >Again, use the `mutate` function and assign the result back to `weather` in order to save the changes to the data.
 
 ```{r}
+weather <- weather %>%
+  mutate(temp = (temp - 32) * 5 / 9, dewp = (dewp - 32) * 5 / 9) %>%
+  mutate(visib = visib / 1.60934) %>%
+  mutate(wind_speed = wind_speed /1.60934 ) %>%
+  mutate(precip = precip * 20.54)
 
 ```
 
@@ -78,17 +94,28 @@ After such a transforation we should check whether values are plausbile:
 
 What was the 2013 average of `temp`, `wind_speed`, and `visib` at the JFK airport?
 ```{r}
+weather %>%
+  select(origin, temp, wind_speed, visib) %>%
+  filter(origin == "JFK") %>%
+  summarise(avg_temp = mean(temp), avg_wind_speed = mean(wind_speed, na.rm = TRUE), avg_visib = mean(visib), origin = max(origin))
 
 ```
 
 What was the *monthly* average of `temp`, `wind_speed`, and `visib` at the JFK airport?
 ```{r}
-
+weather %>%
+  filter(origin == "JFK") %>% 
+  group_by(month) %>%
+  summarise(avg_temp = mean(temp), avg_wind_speed = mean(wind_speed, na.rm = TRUE), avg_visib = mean(visib), origin = max(origin))
 ```
 
 What was the minimum `temp`, the maximum `temp`, and the total amount of `precip` at each of the 3 airports in December 2013? 
 
 ```{r}
+weather %>%
+  filter(month == 12) %>%
+  group_by(origin) %>%
+  summarise(min_temp = min(temp), max_temp = max(temp), total_precip = sum(precip), month = max(month))
 
 ```
 
@@ -96,6 +123,7 @@ What was the minimum `temp`, the maximum `temp`, and the total amount of `precip
 ## Planes
 Look at the data via `View` and print the first 5 rows.
 ```{r}
+view(planes)
 ```
 
 Count the numer of planes per `manufacturer` and sort in descending order? 
@@ -103,30 +131,53 @@ Count the numer of planes per `manufacturer` and sort in descending order?
 > You can either count via `summarise(n())`, or more easily via `count()`.
 
 ```{r}
+planes %>%
+  group_by(manufacturer) %>%
+  summarise(amount = n()) %>%
+  arrange(desc(amount))
 ```
 
 Count the number of planes per `manufacturer` and `model` and again sort in descending order
 ```{r}
+
 ```
 
 Calculate per manufacturer: 1. number of planes, 2. average number of `seats`, 3. average number of `engines`, 4. average `year` when the planes where manufactured. And again order in descending order of the number of planes
 
 ```{r}
-
+planes %>%
+  group_by(manufacturer, model) %>%
+  summarise(amount = n()) %>%
+  arrange(desc(amount))
 ```
 
 
 ## Flights
 Inspect the flights data with `View` and print the first 5 rows.
 ```{r}
+view(flights)
+head(flights, 5)
+unique(flights$year)
+unique(flights$origin)
+unique((flights$hour))
 ```
 
 Let's analyse how take-off times at NYC airports vary in the course of the day. Count the total number of flights (of the whole year) per `hour` of departure.
 ```{r}
+flights %>% 
+  group_by(origin, hour) %>%
+  summarise(total_flights_per_hour = n()) %>%
+  arrange(desc(total_flights_per_hour))
+
 ```
+
+?count
 
 Count the number of flights by destionation airport (`dest`) and arrange them in descending order.
 ```{r}
+flights %>%
+ count(dest, name = "total_dest") %>% 
+  arrange(desc(total_dest))
 
 ```
 
@@ -134,6 +185,8 @@ Count the number of flights by destionation airport (`dest`) and arrange them in
 It is more convenient to have the full names of the destination airports rather than airport codes. So let's join flights data and airport data. We have to address two issues: 
 
 1. **Join variable**: The variable through which the join is supposed to happen has different names in the two datasets. It is called `dest` in the flights data, and `faa` in the airports data. Renaming the variables in the orignal data sets is not a good option because this would make the variable names less informative. Use `help(join)` to find out how we can carry out this join.
+
+help(join)
 
 2. **Which type of join is useful here?** Inner, left, right, full join, ...? It depends on the question that we want to address. 
 
@@ -144,13 +197,14 @@ In general, an **inner join** is the strictest join type. If the codes in the ai
 A suggestion is to start with an inner join. Then we evaluate whether we lost important information through this inner join. If no, then we are just fine. If yes, we can consider a left join that preserves all flights and adds the available airport metadata. The occasions / questions where we need a full join are relatively rare.
 
 ```{r}
-# df_inner <- flights %>% inner_join(airports, by = ...)
+df_inner <- flights %>% inner_join(airports, by = c("dest" = "faa"))
 ```
 
 ## Left join
 Did we lose information on flights. If yes, replace the inner join by a left join (where x = `flights` and y = `airports`). 
 
 ```{r}
+df_left <- flights %>% left_join(airports, by = c("dest" = "faa"))
 
 ```
 
@@ -160,7 +214,7 @@ Did we lose information on flights. If yes, replace the inner join by a left joi
 Do a right join and look at the data afterwards. How many rows does the data have? Are there missing values? How do you judge this join type? How useful is it in our context?
 
 ```{r}
-
+df_right <- flights %>% right_join(airports, by = c("dest" = "faa"))
 ```
 
 A general thought on the decision between left and right join: In datawarehouse terms, the 5 datasets form a **star schema** (see picture below) with 1 **fact table** `flights` in the center and multiple **dimension tables** (`airports`, `weather`, ...) at the margin. The fact table contains numeric values on flight events, and it contains foreign keys that connect with the dimension tables. Generally, fact tables are more interesting from an analytical perspective. Thus, we would usually chose the join type which preserves the full fact table `flights` at the cost of potentially not having all airport metadata, rather than the other way round. In short: we should stick with the left join.
@@ -170,6 +224,15 @@ A general thought on the decision between left and right join: In datawarehouse 
 
 **Is it worth all that joining?** Let's rerun our pevious analysis using the joined data - the one that you prefer. Count the number of flights by destionation airport (`dest`) and the corresponding `name` and arrange them in descending order.
 ```{r}
+df_left %>% 
+  group_by(dest, name)%>%
+  count()%>%
+  arrange(desc(n))
+
+flights %>% 
+  group_by(dest)%>%
+  count()%>%
+  arrange(desc(n))
 
 ```
 
@@ -179,16 +242,112 @@ As we see in the figure above, we can join the data in many more ways. Practice 
 Some questions for inspiration:
 
 - **Planes**: Do smaller planes (measured by the number of seats) have less departure delay?
-- **Airlines I**: 
-  - **Flight distance**: Calculate the average flight distance by airline and display the top 10 airlines
-  - **Delay**: What's the average delay by airline? (But note that this will be strongly correlated with flight distance, so you may want to account for that)
-- **Weather**: How is bad weather (precipitation, low visibility, extremely low temperatures) at NYC related to departure delay? Here you need to join via 5 variables!
-- **Airports**: Visualize some routs via the longitude (`lon`) and latitude (`lat`) data in the `airports` data, and color the lines depending on the average delay. **Careful**: In order to get the location of both origin and destination airports you have to join the airports data 2 times onto the flights data. Hence, you have to be careful with the names. (Which `lon` belongs to the origin and which to the destination...?)
-
 
 ```{r}
+Qestion1 <- flights %>%
+  left_join(planes, by = "tailnum") %>%
+  select(tailnum, seats, dep_delay) %>%
+  group_by(seats) %>%
+  summarise(avg_departure_delay = mean(dep_delay, na.rm = TRUE)) 
+
+Question1.2 <- flights %>%
+  left_join(planes, by = "tailnum") %>%
+  select(tailnum, seats, dep_delay) %>%
+  group_by(seats) %>%
+  summarise(avg_departure_delay = mean(dep_delay, na.rm = TRUE)) %>%
+  drop_na()%>%
+  mutate(size_group = ifelse (seats %in% 2:50, "Small", 
+                              ifelse(seats %in% 51:250, "Medium", "Large"))) %>%
+  group_by(size_group) %>%
+  summarise(avg_departure_delay_by_size_group = mean(avg_departure_delay))
+
+Question1.2$size_group <- as_factor(Question1.2$size_group)
+
+str(Question1.2$size_group)
+```
+- **Airlines I**: 
+  - **Flight distance**: Calculate the average flight distance by airline and display the top 10 airlines
+
+```{r}
+Question2 <- flights %>%
+  left_join(airlines, by = "carrier") %>%
+  group_by(name) %>% 
+  summarise(avg_distance = mean(distance)) %>%
+  arrange(desc(avg_distance))
+
+head(Question2, 10)
+```
+
+  - **Delay**: What's the average delay by airline? (But note that this will be strongly correlated with flight distance, so you may want to account for that)
+  
+```{r}
+Question3 <- flights %>%
+  left_join(airlines, by = "carrier") %>%
+  group_by(name) %>% 
+    summarise(avgde = mean(arr_delay, na.rm = TRUE), avg_dep_delay = mean(dep_delay, na.rm = TRUE), avgd = mean(distance)) %>%
+  arrange(desc(avgd))
+
+ggscatter(Question3, x = "avgde", y = "avgd", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "delay", ylab = "distance")
+
+ggscatter(flights, x = "arr_delay", y = "distance", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "delay", ylab = "distance")
 
 ```
 
+- **Weather**: How is bad weather (precipitation, low visibility, extremely low temperatures) at NYC related to departure delay? Here you need to join via 5 variables!
 
+```{r}
+Question4 <- flights %>%
+  inner_join(weather, by = c("origin" ,"year", "month", "day", "hour"))%>% 
+  group_by(origin, day, month) %>%
+  summarise(visib = mean(visib), temp = mean(temp), precip = mean(precip), del = mean(dep_delay))
+
+
+ggscatter(Question4, x = "del", y = "visib", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "delay", ylab = "visib")
+  
+ggscatter(Question4, x = "del", y = "temp", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "delay", ylab = "temp")
+
+ggscatter(Question4, x = "del", y = "temp", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "delay", ylab = "temp")
+unique(Question4$visib)
+unique(Question4$precip)
+unique(Question4$temp)
+unique(Question4$origin)
+
+```
+
+- **Airports**: Visualize some routs via the longitude (`lon`) and latitude (`lat`) data in the `airports` data, and color the lines depending on the average delay. **Careful**: In order to get the location of both origin and destination airports you have to join the airports data 2 times onto the flights data. Hence, you have to be careful with the names. (Which `lon` belongs to the origin and which to the destination...?)
+
+
+
+
+# Unclear point 
+
+The follow loop 
+Question1answer <- Qestion1 %>%
+  mutate(size_group = if (seats %in% 2:50) { 
+    "Small"
+  } else if (seats %in% 51:250) {
+   "Medium"
+  } else {
+    "Larg"
+  }
+  )
+  
+is giving that waring: 
+**the condition has length > 1 and only the first element will be used**
+The mutate function assigned the value "Small" to all values of $seats
   
