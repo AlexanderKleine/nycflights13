@@ -1,6 +1,6 @@
 ---
 title: "New York City Flights"
-output: 
+output: "Alexander Kleine"
   rmdformats::readthedown:
     df_print: paged
 ---
@@ -95,9 +95,9 @@ After such a transforation we should check whether values are plausbile:
 What was the 2013 average of `temp`, `wind_speed`, and `visib` at the JFK airport?
 ```{r}
 weather %>%
-  select(origin, temp, wind_speed, visib) %>%
-  filter(origin == "JFK") %>%
-  summarise(avg_temp = mean(temp), avg_wind_speed = mean(wind_speed, na.rm = TRUE), avg_visib = mean(visib), origin = max(origin))
+  filter(origin == "JFK") %>% 
+  group_by(origin) %>%
+  summarise(avg_temp = mean(temp), avg_wind_speed = mean(wind_speed, na.rm = TRUE), avg_visib = mean(visib))
 
 ```
 
@@ -105,8 +105,8 @@ What was the *monthly* average of `temp`, `wind_speed`, and `visib` at the JFK a
 ```{r}
 weather %>%
   filter(origin == "JFK") %>% 
-  group_by(month) %>%
-  summarise(avg_temp = mean(temp), avg_wind_speed = mean(wind_speed, na.rm = TRUE), avg_visib = mean(visib), origin = max(origin))
+  group_by(origin, month) %>%
+  summarise(avg_temp = mean(temp), avg_wind_speed = mean(wind_speed, na.rm = TRUE), avg_visib = mean(visib))
 ```
 
 What was the minimum `temp`, the maximum `temp`, and the total amount of `precip` at each of the 3 airports in December 2013? 
@@ -139,16 +139,19 @@ planes %>%
 
 Count the number of planes per `manufacturer` and `model` and again sort in descending order
 ```{r}
-
+planes %>%
+  group_by(manufacturer, model) %>%
+  summarise(amount = n()) %>%
+  arrange(desc(amount))
 ```
 
 Calculate per manufacturer: 1. number of planes, 2. average number of `seats`, 3. average number of `engines`, 4. average `year` when the planes where manufactured. And again order in descending order of the number of planes
 
 ```{r}
 planes %>%
-  group_by(manufacturer, model) %>%
-  summarise(amount = n()) %>%
-  arrange(desc(amount))
+  group_by(manufacturer) %>%
+  summarise(number.plans = n(), avg.seats = mean(seats), avg.engines = mean(engines), avg.year = mean(year, na.rm = TRUE)) %>%
+  arrange(desc(number.plans))
 ```
 
 
@@ -171,7 +174,6 @@ flights %>%
 
 ```
 
-?count
 
 Count the number of flights by destionation airport (`dest`) and arrange them in descending order.
 ```{r}
@@ -179,6 +181,10 @@ flights %>%
  count(dest, name = "total_dest") %>% 
   arrange(desc(total_dest))
 
+flights %>%
+  group_by(dest) %>%
+  summarise(total_dest = n()) %>%
+  arrange(desc(total_dest))
 ```
 
 # Join datasets
@@ -287,15 +293,12 @@ Question3 <- flights %>%
     summarise(avgde = mean(arr_delay, na.rm = TRUE), avg_dep_delay = mean(dep_delay, na.rm = TRUE), avgd = mean(distance)) %>%
   arrange(desc(avgd))
 
-ggscatter(Question3, x = "avgde", y = "avgd", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson",
-          xlab = "delay", ylab = "distance")
+test <- flights %>%
+  left_join(airlines, by = "carrier")
 
-ggscatter(flights, x = "arr_delay", y = "distance", 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "pearson",
-          xlab = "delay", ylab = "distance")
+test %>% ggplot(aes(arr_delay, distance)) +
+  geom_point() + 
+  geom_smooth(method = lm)
 
 ```
 
@@ -305,10 +308,17 @@ ggscatter(flights, x = "arr_delay", y = "distance",
 Question4 <- flights %>%
   inner_join(weather, by = c("origin" ,"year", "month", "day", "hour"))%>% 
   group_by(origin, day, month) %>%
-  summarise(visib = mean(visib), temp = mean(temp), precip = mean(precip), del = mean(dep_delay))
+  summarise(visib = mean(visib, na.rm = TRUE), temp = mean(temp, na.rm = TRUE), precip = mean(precip, na.rm = TRUE), del = mean(dep_delay, na.rm = TRUE))%>%
+  arrange(month)
 
 
-ggscatter(Question4, x = "del", y = "visib", 
+Question4 %>% ggplot(aes(del, visib, color = origin))+
+  geom_point()+
+  geom_smooth()
+
+
+
+qggscatter(Question4, x = "del", y = "visib", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "pearson",
           xlab = "delay", ylab = "visib")
@@ -331,23 +341,4 @@ unique(Question4$origin)
 
 - **Airports**: Visualize some routs via the longitude (`lon`) and latitude (`lat`) data in the `airports` data, and color the lines depending on the average delay. **Careful**: In order to get the location of both origin and destination airports you have to join the airports data 2 times onto the flights data. Hence, you have to be careful with the names. (Which `lon` belongs to the origin and which to the destination...?)
 
-
-
-
-# Unclear point 
-
-The follow loop 
-Question1answer <- Qestion1 %>%
-  mutate(size_group = if (seats %in% 2:50) { 
-    "Small"
-  } else if (seats %in% 51:250) {
-   "Medium"
-  } else {
-    "Larg"
-  }
-  )
-  
-is giving that waring: 
-**the condition has length > 1 and only the first element will be used**
-The mutate function assigned the value "Small" to all values of $seats
   
